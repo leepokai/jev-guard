@@ -192,11 +192,49 @@ test("key: config file is read when env has no credentials", async () => {
   const cwd = new URL("..", import.meta.url).pathname;
   execFileSync(process.execPath, ["src/cli.js", "key", "vck_abc"], { env: { ...process.env, HOME: home }, cwd });
   execFileSync(process.execPath, ["src/cli.js", "key", "ts_xyz"], { env: { ...process.env, HOME: home }, cwd });
+  execFileSync(process.execPath, ["src/cli.js", "key", "sk-or-v1-abc"], { env: { ...process.env, HOME: home }, cwd });
   const file = join(home, ".jev-guard", "config.json");
-  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { aiGatewayApiKey: "vck_abc", jevApiKey: "ts_xyz" });
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { aiGatewayApiKey: "vck_abc", jevApiKey: "ts_xyz", openRouterApiKey: "sk-or-v1-abc" });
   assert.equal(statSync(file).mode & 0o777, 0o600);
   assert.deepEqual(backend({ JEV_GUARD_CONFIG: file }), { kind: "typesafe", key: "ts_xyz" });
   assert.equal(backend({ JEV_GUARD_CONFIG: join(home, "missing.json") }), null);
+});
+
+test("backends: OpenRouter and JEV_BASE_URL use the System One shape; a custom server never gets another provider's key", async () => {
+  const { ask, backend, systemOneUrl } = await import("../src/jev.js");
+  const q = { x: { type: "noul", instructions: "?" } };
+  const seen = [];
+  const record = async (url, init) => {
+    seen.push({ url, headers: init.headers, body: JSON.parse(init.body) });
+    return { ok: true, json: async () => ({ answers: { x: { type: "noul", noul: 0.5 } } }) };
+  };
+  const missing = "/nonexistent/jev-guard-config.json";
+
+  await ask("s", q, { env: { OPENROUTER_API_KEY: "sk-or-1", JEV_GUARD_CONFIG: missing }, fetchImpl: record });
+  assert.equal(seen[0].url, "https://openrouter.ai/api/v1/systemone");
+  assert.equal(seen[0].headers.Authorization, "Bearer sk-or-1");
+  assert.equal(seen[0].body.model, "jev-1.13");
+  assert.deepEqual(seen[0].body.questions, q);                       // noul stays noul: same shape as TypeSafe
+
+  await ask("s", q, { env: { OPENROUTER_API_KEY: "sk-or-1", JEV_MODEL: "jaredpalmer/kev-4b", JEV_GUARD_CONFIG: missing }, fetchImpl: record });
+  assert.equal(seen[1].body.model, "jaredpalmer/kev-4b");
+
+  // a local Kev: no key needed, and the TypeSafe/OpenRouter keys in the environment are not sent to it
+  await ask("s", q, { env: { JEV_BASE_URL: "http://127.0.0.1:8009/", JEV_API_KEY: "ts_secret", OPENROUTER_API_KEY: "sk-or-1" }, fetchImpl: record });
+  assert.equal(seen[2].url, "http://127.0.0.1:8009/v1/systemone");
+  assert.equal(seen[2].headers.Authorization, undefined);
+  assert.equal(seen[2].body.model, "jev-latest");
+
+  await ask("s", q, { env: { JEV_BASE_URL: "https://s1.example.com/api", JEV_BASE_API_KEY: "own" }, fetchImpl: record });
+  assert.equal(seen[3].url, "https://s1.example.com/api/v1/systemone");
+  assert.equal(seen[3].headers.Authorization, "Bearer own");
+
+  assert.throws(() => systemOneUrl("http://s1.example.com"), /https, or http on localhost/);
+  assert.throws(() => systemOneUrl("not a url"), /not a URL/);
+  assert.equal(systemOneUrl("http://localhost:8008"), "http://localhost:8008/v1/systemone");
+  assert.equal(systemOneUrl("http://[::1]:8008"), "http://[::1]:8008/v1/systemone");
+  assert.deepEqual(backend({ OPENROUTER_API_KEY: "sk-or-1" }), { kind: "openrouter", key: "sk-or-1" });
+  assert.deepEqual(backend({ JEV_API_KEY: "ts", OPENROUTER_API_KEY: "sk-or-1" }), { kind: "typesafe", key: "ts" });
 });
 
 test("context: the user's request lifts ask, flagged content turns a follow-up into deny, instruction files get reported", async () => {

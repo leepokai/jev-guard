@@ -59,7 +59,7 @@ Everything else goes through the npm package:
 
 ```bash
 npm i -g jev-guard
-jev-guard key "…"                    # TypeSafe key from console.typesafe.ai, or a vck_… Vercel AI Gateway key
+jev-guard key "…"                    # TypeSafe key from console.typesafe.ai, a vck_… Vercel AI Gateway key, or an sk-or-… OpenRouter key
 jev-guard install claude|codex|copilot|gemini|cursor|pi|opencode   # writes hooks into that agent's user config
 jev-guard check Bash '{"command":"rm -rf ~/"}'
 # DENY  jev-guard blocked this call (risk 3.0/3, approval p=0.98, confidence 0.99): Bash rm -rf ~/ …
@@ -69,7 +69,13 @@ jev-guard check Bash '{"command":"rm -rf ~/"}'
 
 ### Where the key lives
 
-`jev-guard key` writes `~/.jev-guard/config.json` (mode 0600). Every adapter reads that file, so it works for GUI hosts that never see your shell profile. Environment variables win when present: `JEV_API_KEY`, `AI_GATEWAY_API_KEY`, or `VERCEL_OIDC_TOKEN` (from `vercel env pull`, expires in ~12 h). Gemini CLI asks for the key when you install the extension and stores it in its keychain. The key is sent only to `api.typesafe.ai` or `ai-gateway.vercel.sh`, never stored anywhere else by jev-guard, and never given to the coding agent.
+`jev-guard key` writes `~/.jev-guard/config.json` (mode 0600). Every adapter reads that file, so it works for GUI hosts that never see your shell profile. Environment variables win when present: `JEV_API_KEY`, `OPENROUTER_API_KEY`, `AI_GATEWAY_API_KEY`, or `VERCEL_OIDC_TOKEN` (from `vercel env pull`, expires in ~12 h). Gemini CLI asks for the key when you install the extension and stores it in its keychain. Each key is sent only to its own provider (`api.typesafe.ai`, `openrouter.ai`, or `ai-gateway.vercel.sh`), never stored anywhere else by jev-guard, and never given to the coding agent.
+
+### Other System One providers
+
+OpenRouter serves Jev over the same System One request and response ([OpenRouter's guide](https://openrouter.ai/docs/guides/community/typesafe-sdk)); with `OPENROUTER_API_KEY` set, jev-guard calls `https://openrouter.ai/api/v1/systemone` with model `jev-1.13` (`JEV_MODEL` picks another, e.g. `jaredpalmer/kev-4b`).
+
+`JEV_BASE_URL` points jev-guard at any other server that speaks `POST /v1/systemone`, such as a local [Kev](https://github.com/jaredpalmer/kev) (`JEV_BASE_URL=http://127.0.0.1:8009`), and takes precedence over the keys above. It gets only its own optional `JEV_BASE_API_KEY`; no TypeSafe, OpenRouter or gateway key is ever sent to it. It must be `https`, or plain `http` on localhost. Thresholds were calibrated on Jev: check the calibration table against another model before relying on it.
 
 ### ACP example (Zed)
 
@@ -164,7 +170,9 @@ Results shorter than 200 characters and results of local edit/search tools are s
 | `JEV_GUARD_SKIP_TOOLS` | | comma-separated tool names never assessed |
 | `JEV_GUARD_SKIP_SCAN` | | comma-separated tool names whose results are never scanned |
 | `JEV_GUARD_FAIL_CLOSED` | unset | if set, an unreachable Jev **denies** instead of allowing |
-| `JEV_MODEL` | `jev-latest` / `typesafe-ai/jev` | model id for the direct API / the gateway |
+| `JEV_MODEL` | `jev-latest` / `jev-1.13` / `typesafe-ai/jev` | model id for TypeSafe or `JEV_BASE_URL` / OpenRouter / the gateway |
+| `JEV_BASE_URL` | unset | any System One server (`<base>/v1/systemone`), e.g. a local Kev; takes precedence over every key |
+| `JEV_BASE_API_KEY` | unset | bearer key sent only to `JEV_BASE_URL` |
 | `JEV_GUARD_CONFIG` | `~/.jev-guard/config.json` | where `jev-guard key` stores the key |
 
 Scores must lie in 0–3 and probabilities in 0–1; anything else falls back to the default.

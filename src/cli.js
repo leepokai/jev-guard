@@ -20,9 +20,11 @@ const USAGE = `jev-guard — prompt-injection and dangerous-action guard for cod
   jev-guard install <agent>               Register in that agent's user config:
                                           claude | codex | copilot | gemini | cursor | pi | opencode
   jev-guard key <api key>                 Save the key to ~/.jev-guard/config.json (0600); vck_… keys are
-                                          treated as Vercel AI Gateway keys, anything else as TypeSafe
+                                          treated as Vercel AI Gateway keys, sk-or-… keys as OpenRouter,
+                                          anything else as TypeSafe (--gateway / --openrouter override)
 
-Credentials are read from JEV_API_KEY / AI_GATEWAY_API_KEY / VERCEL_OIDC_TOKEN first, then from that file.`;
+Credentials are read from JEV_API_KEY / OPENROUTER_API_KEY / AI_GATEWAY_API_KEY / VERCEL_OIDC_TOKEN first, then
+from that file. JEV_BASE_URL points at any other System One server (e.g. a local Kev) and takes precedence.`;
 
 switch (cmd) {
   case "hook": {
@@ -73,11 +75,14 @@ switch (cmd) {
     const { CONFIG_FILE, readConfig } = await import("./jev.js");
     const key = rest.find((a) => !a.startsWith("--"));
     if (!key) die("key needs the API key as an argument");
-    const gateway = rest.includes("--gateway") || key.startsWith("vck_");
-    const cfg = { ...readConfig(), [gateway ? "aiGatewayApiKey" : "jevApiKey"]: key };
+    const kind = rest.includes("--gateway") || key.startsWith("vck_") ? "gateway"
+      : rest.includes("--openrouter") || key.startsWith("sk-or-") ? "openrouter" : "typesafe";
+    const field = { gateway: "aiGatewayApiKey", openrouter: "openRouterApiKey", typesafe: "jevApiKey" }[kind];
+    const cfg = { ...readConfig(), [field]: key };
     mkdirSync(dirname(CONFIG_FILE), { recursive: true, mode: 0o700 });
     writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
-    console.log(`jev-guard: ${gateway ? "Vercel AI Gateway" : "TypeSafe"} key saved to ${CONFIG_FILE}`);
+    const label = { gateway: "Vercel AI Gateway", openrouter: "OpenRouter", typesafe: "TypeSafe" }[kind];
+    console.log(`jev-guard: ${label} key saved to ${CONFIG_FILE}`);
     break;
   }
   default:
@@ -155,7 +160,7 @@ function install(target) {
 
 async function keyHint() {
   const { backend } = await import("./jev.js");
-  if (!backend()) console.log("No API key found yet: run `jev-guard key <key>` (or export JEV_API_KEY / AI_GATEWAY_API_KEY). Until then the guard fails open.");
+  if (!backend()) console.log("No API key found yet: run `jev-guard key <key>` (or export JEV_API_KEY / OPENROUTER_API_KEY / AI_GATEWAY_API_KEY, or JEV_BASE_URL for a local server). Until then the guard fails open.");
 }
 
 function readJson(file) { return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}; }
