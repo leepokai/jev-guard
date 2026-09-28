@@ -21,13 +21,14 @@ export const CONFIG_FILE = join(homedir(), ".jev-guard", "config.json");
 export function backend(env = process.env) {
   if (env.JEV_BASE_URL) return { kind: "custom", key: env.JEV_BASE_API_KEY, url: systemOneUrl(env.JEV_BASE_URL) };
   if (env.JEV_API_KEY) return { kind: "typesafe", key: env.JEV_API_KEY };
-  if (env.OPENROUTER_API_KEY) return { kind: "openrouter", key: env.OPENROUTER_API_KEY };
   if (env.AI_GATEWAY_API_KEY) return { kind: "gateway", key: env.AI_GATEWAY_API_KEY, auth: "api-key" };
   if (env.VERCEL_OIDC_TOKEN) return { kind: "gateway", key: env.VERCEL_OIDC_TOKEN, auth: "oidc" };  // `vercel env pull`; expires in ~12h
   const cfg = readConfig(env);
   if (cfg.jevApiKey) return { kind: "typesafe", key: cfg.jevApiKey };
   if (cfg.openRouterApiKey) return { kind: "openrouter", key: cfg.openRouterApiKey };
   if (cfg.aiGatewayApiKey) return { kind: "gateway", key: cfg.aiGatewayApiKey, auth: "api-key" };
+  // OPENROUTER_API_KEY is shared with many other tools, so it only applies when no Jev-specific key is configured.
+  if (env.OPENROUTER_API_KEY) return { kind: "openrouter", key: env.OPENROUTER_API_KEY };
   return null;
 }
 
@@ -37,6 +38,7 @@ export function systemOneUrl(base) {
   try { u = new URL(base); } catch { throw new Error(`JEV_BASE_URL is not a URL: ${base}`); }
   if (u.protocol !== "https:" && !(u.protocol === "http:" && LOOPBACK.has(u.hostname)))
     throw new Error(`JEV_BASE_URL must be https, or http on localhost: ${base}`);
+  u.search = ""; u.hash = "";
   return u.href.replace(/\/+$/, "") + SYSTEMONE_PATH;
 }
 

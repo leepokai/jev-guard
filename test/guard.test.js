@@ -233,8 +233,17 @@ test("backends: OpenRouter and JEV_BASE_URL use the System One shape; a custom s
   assert.throws(() => systemOneUrl("not a url"), /not a URL/);
   assert.equal(systemOneUrl("http://localhost:8008"), "http://localhost:8008/v1/systemone");
   assert.equal(systemOneUrl("http://[::1]:8008"), "http://[::1]:8008/v1/systemone");
-  assert.deepEqual(backend({ OPENROUTER_API_KEY: "sk-or-1" }), { kind: "openrouter", key: "sk-or-1" });
+  assert.deepEqual(backend({ OPENROUTER_API_KEY: "sk-or-1", JEV_GUARD_CONFIG: missing }), { kind: "openrouter", key: "sk-or-1" });
   assert.deepEqual(backend({ JEV_API_KEY: "ts", OPENROUTER_API_KEY: "sk-or-1" }), { kind: "typesafe", key: "ts" });
+  assert.equal(systemOneUrl("https://s1.example.com/api/?v=1#x"), "https://s1.example.com/api/v1/systemone");
+
+  // a shell-wide OPENROUTER_API_KEY meant for other tools must not override a key saved with `jev-guard key`
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const saved = join(mkdtempSync(join(tmpdir(), "jev-cfg-")), "config.json");
+  writeFileSync(saved, JSON.stringify({ jevApiKey: "ts_saved" }));
+  assert.deepEqual(backend({ OPENROUTER_API_KEY: "sk-or-1", JEV_GUARD_CONFIG: saved }), { kind: "typesafe", key: "ts_saved" });
 });
 
 test("context: the user's request lifts ask, flagged content turns a follow-up into deny, instruction files get reported", async () => {

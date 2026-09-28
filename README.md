@@ -69,7 +69,7 @@ jev-guard check Bash '{"command":"rm -rf ~/"}'
 
 ### Where the key lives
 
-`jev-guard key` writes `~/.jev-guard/config.json` (mode 0600). Every adapter reads that file, so it works for GUI hosts that never see your shell profile. Environment variables win when present: `JEV_API_KEY`, `OPENROUTER_API_KEY`, `AI_GATEWAY_API_KEY`, or `VERCEL_OIDC_TOKEN` (from `vercel env pull`, expires in ~12 h). Gemini CLI asks for the key when you install the extension and stores it in its keychain. Each key is sent only to its own provider (`api.typesafe.ai`, `openrouter.ai`, or `ai-gateway.vercel.sh`), never stored anywhere else by jev-guard, and never given to the coding agent.
+`jev-guard key` writes `~/.jev-guard/config.json` (mode 0600). Every adapter reads that file, so it works for GUI hosts that never see your shell profile. Environment variables win when present: `JEV_API_KEY`, `AI_GATEWAY_API_KEY`, or `VERCEL_OIDC_TOKEN` (from `vercel env pull`, expires in ~12 h). `OPENROUTER_API_KEY` is used only when no other key is set, env or file, since many other tools export it too. Gemini CLI asks for the key when you install the extension and stores it in its keychain. Each key is sent only to its own provider (`api.typesafe.ai`, `openrouter.ai`, or `ai-gateway.vercel.sh`), never stored anywhere else by jev-guard, and never given to the coding agent.
 
 ### Other System One providers
 

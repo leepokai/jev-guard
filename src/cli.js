@@ -23,8 +23,8 @@ const USAGE = `jev-guard — prompt-injection and dangerous-action guard for cod
                                           treated as Vercel AI Gateway keys, sk-or-… keys as OpenRouter,
                                           anything else as TypeSafe (--gateway / --openrouter override)
 
-Credentials are read from JEV_API_KEY / OPENROUTER_API_KEY / AI_GATEWAY_API_KEY / VERCEL_OIDC_TOKEN first, then
-from that file. JEV_BASE_URL points at any other System One server (e.g. a local Kev) and takes precedence.`;
+Credentials are read from JEV_API_KEY / AI_GATEWAY_API_KEY / VERCEL_OIDC_TOKEN first, then from that file, then
+from OPENROUTER_API_KEY. JEV_BASE_URL points at any other System One server (e.g. a local Kev) and takes precedence.`;
 
 switch (cmd) {
   case "hook": {
