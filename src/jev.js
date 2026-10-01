@@ -6,9 +6,15 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/systemone";   // https://op
 const GATEWAY_URL = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model";
 const SYSTEMONE_PATH = "/v1/systemone";
 const DEFAULT_MODEL = { custom: "jev-latest", typesafe: "jev-latest", openrouter: "jev-1.13", gateway: "typesafe-ai/jev" };
-const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const LOOPBACK = new Set(["localhost", "[::1]"]);
+// Plain http is fine where the traffic never leaves this machine or the private network: loopback and RFC 1918
+// (e.g. a Kev in Docker at the bridge IP 172.17.0.1).
+const LOCAL_NETS = new BlockList();
+for (const [net, bits] of [["127.0.0.0", 8], ["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]]) LOCAL_NETS.addSubnet(net, bits);
+const isLocal = (host) => LOOPBACK.has(host) || (isIPv4(host) && LOCAL_NETS.check(host, "ipv4"));
 
 import { readFileSync } from "node:fs";
+import { BlockList, isIPv4 } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -32,12 +38,12 @@ export function backend(env = process.env) {
   return null;
 }
 
-/** `<base>/v1/systemone` for a System One server; https only, except plain http to this machine. */
+/** `<base>/v1/systemone` for a System One server; https only, except plain http to this machine or a private address. */
 export function systemOneUrl(base) {
   let u;
   try { u = new URL(base); } catch { throw new Error(`JEV_BASE_URL is not a URL: ${base}`); }
-  if (u.protocol !== "https:" && !(u.protocol === "http:" && LOOPBACK.has(u.hostname)))
-    throw new Error(`JEV_BASE_URL must be https, or http on localhost: ${base}`);
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && isLocal(u.hostname)))
+    throw new Error(`JEV_BASE_URL must be https, or http on localhost or a private address: ${base}`);
   u.search = ""; u.hash = "";
   return u.href.replace(/\/+$/, "") + SYSTEMONE_PATH;
 }

@@ -230,6 +230,10 @@ test("backends: OpenRouter and JEV_BASE_URL use the System One shape; a custom s
   assert.equal(seen[3].headers.Authorization, "Bearer own");
 
   assert.throws(() => systemOneUrl("http://s1.example.com"), /https, or http on localhost/);
+  assert.throws(() => systemOneUrl("http://172.32.0.1"), /https, or http on localhost/);    // just outside 172.16/12
+  assert.throws(() => systemOneUrl("http://8.8.8.8"), /https, or http on localhost/);
+  for (const host of ["10.1.2.3", "172.17.0.1", "172.31.255.255", "192.168.1.10", "127.0.0.2"])
+    assert.equal(systemOneUrl(`http://${host}:8009`), `http://${host}:8009/v1/systemone`);
   assert.throws(() => systemOneUrl("not a url"), /not a URL/);
   assert.equal(systemOneUrl("http://localhost:8008"), "http://localhost:8008/v1/systemone");
   assert.equal(systemOneUrl("http://[::1]:8008"), "http://[::1]:8008/v1/systemone");
