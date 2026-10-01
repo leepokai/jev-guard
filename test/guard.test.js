@@ -140,6 +140,33 @@ test("hook dialects: copilot, gemini, cursor", async () => {
   assert.deepEqual(await handleHook({ hook_event_name: "postToolUse", tool_name: "Shell", tool_input: {}, tool_output: "short" }, opts), {});
 });
 
+test("hook dialects: agy", async () => {
+  const agyPre = (command, name = "run_command") => ({
+    conversationId: "conv-1",
+    workspacePaths: ["/tmp/workspace"],
+    toolCall: { name, args: { CommandLine: command } }
+  });
+  // auto-detection of agy from conversationId / toolCall
+  const denyRes = await handleHook(agyPre("rm -rf /"), opts);
+  assert.equal(denyRes.decision, "deny");
+  assert.match(denyRes.reason, /blocked/);
+
+  const askRes = await handleHook(agyPre("git push"), opts);
+  assert.equal(askRes.decision, "ask");
+
+  const allowRes = await handleHook(agyPre("ls"), opts);
+  assert.equal(allowRes.decision, "allow");
+
+  const readOnlyRes = await handleHook(agyPre("", "view_file"), opts);
+  assert.equal(readOnlyRes.decision, "allow");
+
+  const postRes = await handleHook({ conversationId: "conv-1", stepIdx: 1 }, { ...opts, agent: "agy", event: "PostToolUse" });
+  assert.deepEqual(postRes, {});
+
+  const preInv = await handleHook({ conversationId: "conv-1", invocationNum: 1 }, { ...opts, agent: "agy", event: "PreInvocation" });
+  assert.deepEqual(preInv, {});
+});
+
 test("opencode plugin: throws on deny, rewrites flagged output, drives permission.ask", async () => {
   const { JevGuard } = await import("../src/opencode.js");
   process.env.JEV_API_KEY = "test";
@@ -166,7 +193,7 @@ test("install writes valid config for every target", async () => {
   const { execFileSync } = await import("node:child_process");
   const home = mkdtempSync(join(tmpdir(), "jev-guard-home-"));
   const files = { claude: ".claude/settings.json", codex: ".codex/hooks.json", copilot: ".copilot/hooks/jev-guard.json", gemini: ".gemini/settings.json",
-    cursor: ".cursor/hooks.json", pi: ".pi/agent/settings.json", opencode: ".config/opencode/plugins/jev-guard.js" };
+    agy: ".gemini/config/hooks.json", cursor: ".cursor/hooks.json", pi: ".pi/agent/settings.json", opencode: ".config/opencode/plugins/jev-guard.js" };
   for (const [target, rel] of Object.entries(files)) {
     execFileSync(process.execPath, ["src/cli.js", "install", target], { env: { ...process.env, HOME: home }, cwd: new URL("..", import.meta.url).pathname });
     execFileSync(process.execPath, ["src/cli.js", "install", target], { env: { ...process.env, HOME: home }, cwd: new URL("..", import.meta.url).pathname });  // idempotent
@@ -174,7 +201,13 @@ test("install writes valid config for every target", async () => {
     assert.ok(existsSync(join(home, rel)) && text.includes("jev-guard"), target);
     if (rel.endsWith(".json")) {  // idempotent: exactly one jev-guard entry per event, whatever the checkout path looks like
       const cfg = JSON.parse(text);
-      for (const [ev, groups] of Object.entries(cfg.hooks ?? {})) assert.equal(groups.filter((g) => JSON.stringify(g).includes("jev-guard")).length, 1, `${target} ${ev} duplicated`);
+      if (target === "agy") {
+        assert.ok(cfg["jev-guard"].PreToolUse.length === 1);
+        assert.ok(cfg["jev-guard"].PostToolUse.length === 1);
+        assert.ok(cfg["jev-guard"].PreInvocation.length === 1);
+      } else {
+        for (const [ev, groups] of Object.entries(cfg.hooks ?? {})) assert.equal(groups.filter((g) => JSON.stringify(g).includes("jev-guard")).length, 1, `${target} ${ev} duplicated`);
+      }
     }
   }
   const cursor = JSON.parse(readFileSync(join(home, files.cursor), "utf8"));

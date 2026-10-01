@@ -51,8 +51,10 @@ export function readTranscript(path) {
     const content = rec.message?.content ?? rec.content;
     const text = textOf(content);
     if (!text) continue;
-    if (role === "user") out.user.push(text);
-    else if (role === "assistant") out.assistant.push(text);
+    const isUser = role === "user" || rec.type === "USER_INPUT" || rec.source === "USER_EXPLICIT";
+    const isAssistant = role === "assistant" || rec.type === "PLANNER_RESPONSE" || rec.source === "MODEL";
+    if (isUser) out.user.push(text);
+    else if (isAssistant) out.assistant.push(text);
   }
   return out;
 }
