@@ -129,6 +129,7 @@ function install(target) {
       file = join(home, ".gemini", "config", "hooks.json");
       cfg = readJson(file);
       cfg["jev-guard"] = {
+        ...Object.fromEntries(Object.entries(cfg["jev-guard"] ?? {}).filter(([ev]) => !["PreToolUse", "PostToolUse", "PreInvocation"].includes(ev))),
         PreToolUse: [
           {
             matcher: ".*",

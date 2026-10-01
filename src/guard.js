@@ -103,7 +103,7 @@ export const ACTION_QUESTIONS = {
 const READ_ONLY = new Set(["read", "glob", "grep", "ls", "list", "find", "webfetch", "websearch", "todowrite", "todoread", "askuserquestion", "exitplanmode",
   "notebookread", "listmcpresourcestool", "readmcpresourcetool", "toolsearch", "skill", "task", "agent", "tabs_context_mcp", "read_page", "get_page_text",
   "read_file", "read_many_files", "list_directory", "search_file_content", "grep_search", "google_web_search", "web_fetch", "write_todos",
-  "view_file", "search_web", "read_url_content", "ask_question", "manage_subagents", "manage_task", "schedule"]);
+  "view_file", "search_web", "read_url_content", "ask_question"]);
 const NEVER_EXTERNAL = new Set(["edit", "write", "multiedit", "notebookedit", "apply_patch", "patch", "delete", "glob", "grep", "ls", "list", "find", "todowrite", "todoread",
   "askuserquestion", "exitplanmode", "write_file", "replace", "write_todos", "write_to_file", "replace_file_content"]);
 // task/agent sit only in READ_ONLY: the sub-agent's own calls are judged one by one, but what it brings back can carry external text.
