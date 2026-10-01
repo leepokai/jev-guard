@@ -4,6 +4,7 @@
 - Files under `.claude/`, `.codex/`, `.gemini/` or `.cursor/` `docs/` and `reference/` count as instruction files (#1).
 - OpenCode/Kilo: `skill` results are checked as instruction files, not as untrusted content (#2).
 - `Task`/`Agent` results are scanned for injection; out-of-range thresholds fall back to their defaults (#3).
+- `JEV_BASE_URL` accepts plain `http` on RFC 1918 private addresses (10/8, 172.16/12, 192.168/16) and all of 127/8, e.g. a Kev in Docker at 172.17.0.1 (#6).
 
 ## 0.3.1 — 2026-09-18
 - Jev calls retry on 429/5xx *and* network errors inside one time budget (`JEV_GUARD_TIMEOUT_MS`, 20 s), so a hook never outlives its host's ~30 s timeout and fail-closed actually fails closed.

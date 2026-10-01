@@ -75,7 +75,7 @@ jev-guard check Bash '{"command":"rm -rf ~/"}'
 
 OpenRouter serves Jev over the same System One request and response ([OpenRouter's guide](https://openrouter.ai/docs/guides/community/typesafe-sdk)); with `OPENROUTER_API_KEY` set, jev-guard calls `https://openrouter.ai/api/v1/systemone` with model `jev-1.13` (`JEV_MODEL` picks another, e.g. `jaredpalmer/kev-4b`).
 
-`JEV_BASE_URL` points jev-guard at any other server that speaks `POST /v1/systemone`, such as a local [Kev](https://github.com/jaredpalmer/kev) (`JEV_BASE_URL=http://127.0.0.1:8009`), and takes precedence over the keys above. It gets only its own optional `JEV_BASE_API_KEY`; no TypeSafe, OpenRouter or gateway key is ever sent to it. It must be `https`, or plain `http` on localhost. Thresholds were calibrated on Jev: check the calibration table against another model before relying on it.
+`JEV_BASE_URL` points jev-guard at any other server that speaks `POST /v1/systemone`, such as a local [Kev](https://github.com/jaredpalmer/kev) (`JEV_BASE_URL=http://127.0.0.1:8009`), and takes precedence over the keys above. It gets only its own optional `JEV_BASE_API_KEY`; no TypeSafe, OpenRouter or gateway key is ever sent to it. It must be `https`, or plain `http` on localhost or a private (RFC 1918) address such as a Docker bridge IP. Thresholds were calibrated on Jev: check the calibration table against another model before relying on it.
 
 ### ACP example (Zed)
 
