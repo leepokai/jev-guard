@@ -94,7 +94,7 @@ export async function handleHook(input, { agent, env = process.env, fetchImpl, e
     if (event === "PostToolUse") {
       const tool = input.toolCall?.name ?? input.tool_name;
       const toolInput = input.toolCall?.args ?? input.tool_input;
-      const text = collectText(input.tool_response ?? input.tool_result ?? input.error);
+      const text = collectText(input.toolResponse ?? input.toolResult ?? input.tool_response ?? input.tool_result ?? input.error);
       if (text) await scan(text, tool, toolInput, false);
       return {};
     }
@@ -164,18 +164,27 @@ export async function handleHook(input, { agent, env = process.env, fetchImpl, e
 }
 
 export async function main(argv = process.argv.slice(2), stdin = process.stdin, stdout = process.stdout, env = process.env) {
-  const input = JSON.parse(await readAll(stdin));
-  const agent = argv.includes("--agent") ? argv[argv.indexOf("--agent") + 1] : detectAgent(input);
+  let input = {};
+  const agentArg = argv.includes("--agent") ? argv[argv.indexOf("--agent") + 1] : undefined;
   const event = argv.includes("--event") ? argv[argv.indexOf("--event") + 1] : undefined;
   let out = null;
+  let agent = agentArg;
   try {
+    input = JSON.parse(await readAll(stdin));
+    agent = agentArg ?? detectAgent(input);
     out = await handleHook(input, { agent, env, event });
   } catch (err) {
     process.stderr.write(`jev-guard: ${err.message}\n`);
     const closed = !!env.JEV_GUARD_FAIL_CLOSED;  // default is fail-open: a dead API must not freeze the agent
     const reason = `jev-guard unavailable (${err.message}) and JEV_GUARD_FAIL_CLOSED is set`;
     const resolvedEvent = event ?? input.hook_event_name;
-    if (agent === "agy") out = closed ? { decision: "deny", reason } : { decision: "allow" };
+    if (agent === "agy") {
+      if (resolvedEvent === "PreToolUse") {
+        out = closed ? { decision: "deny", reason } : { decision: "allow" };
+      } else {
+        out = closed && resolvedEvent === "PreInvocation" ? { injectSteps: [{ ephemeralMessage: reason }] } : {};
+      }
+    }
     else if (CURSOR_PERMISSION_EVENTS.has(resolvedEvent)) out = closed ? { permission: "deny", user_message: reason, agent_message: reason } : { permission: "allow" };
     else if (resolvedEvent === "beforeSubmitPrompt") out = { continue: true };
     else if (closed && resolvedEvent === "PreToolUse") out = agent === "copilot" ? { permissionDecision: "deny", permissionDecisionReason: reason }
@@ -186,7 +195,7 @@ export async function main(argv = process.argv.slice(2), stdin = process.stdin, 
 }
 
 function sourceOf(toolInput) {
-  const s = toolInput?.url ?? toolInput?.Url ?? toolInput?.file_path ?? toolInput?.path ?? toolInput?.filePath ?? toolInput?.TargetFile ?? toolInput?.command ?? toolInput?.CommandLine;
+  const s = toolInput?.url ?? toolInput?.Url ?? toolInput?.file_path ?? toolInput?.path ?? toolInput?.filePath ?? toolInput?.TargetFile ?? toolInput?.AbsolutePath ?? toolInput?.command ?? toolInput?.CommandLine;
   return s && preview(s, 120);
 }
 

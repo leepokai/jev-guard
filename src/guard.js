@@ -214,7 +214,7 @@ export function collectText(value, out = []) {
 }
 
 export function preview(input, max = 160) {
-  const s = typeof input === "string" ? input : input?.CommandLine ?? input?.command ?? input?.TargetFile ?? input?.file_path ?? input?.path ?? input?.url ?? input?.Url ?? JSON.stringify(input ?? "");
+  const s = typeof input === "string" ? input : input?.CommandLine ?? input?.command ?? input?.TargetFile ?? input?.AbsolutePath ?? input?.file_path ?? input?.path ?? input?.url ?? input?.Url ?? JSON.stringify(input ?? "");
   return String(s).replace(/\s+/g, " ").slice(0, max);
 }
 

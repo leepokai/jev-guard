@@ -132,13 +132,13 @@ function install(target) {
         ...Object.fromEntries(Object.entries(cfg["jev-guard"] ?? {}).filter(([ev]) => !["PreToolUse", "PostToolUse", "PreInvocation"].includes(ev))),
         PreToolUse: [
           {
-            matcher: ".*",
+            matcher: "*",
             hooks: [{ type: "command", command: cmd(" --agent agy --event PreToolUse"), timeout: 30 }]
           }
         ],
         PostToolUse: [
           {
-            matcher: ".*",
+            matcher: "*",
             hooks: [{ type: "command", command: cmd(" --agent agy --event PostToolUse"), timeout: 30 }]
           }
         ],
