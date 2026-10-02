@@ -18,7 +18,7 @@ const USAGE = `jev-guard — prompt-injection and dangerous-action guard for cod
                                           agent's user dirs + the current project) for instructions their installer
                                           would not expect; cached by content hash, exit 2 if anything is flagged
   jev-guard install <agent>               Register in that agent's user config:
-                                          claude | codex | copilot | gemini | cursor | pi | opencode
+                                          claude | codex | copilot | gemini | agy | cursor | pi | opencode
   jev-guard key <api key>                 Save the key to ~/.jev-guard/config.json (0600); vck_… keys are
                                           treated as Vercel AI Gateway keys, sk-or-… keys as OpenRouter,
                                           anything else as TypeSafe (--gateway / --openrouter override)
@@ -124,6 +124,34 @@ function install(target) {
       for (const ev of ["BeforeTool", "AfterTool", "BeforeAgent", "SessionStart"]) cfg.hooks[ev] = [...notOurs(cfg.hooks[ev]), entry];
       break;
     }
+    case "agy":
+    case "antigravity": {
+      file = join(home, ".gemini", "config", "hooks.json");
+      cfg = readJson(file);
+      cfg["jev-guard"] = {
+        ...Object.fromEntries(Object.entries(cfg["jev-guard"] ?? {}).filter(([ev]) => !["PreToolUse", "PostToolUse", "PreInvocation"].includes(ev))),
+        PreToolUse: [
+          {
+            matcher: "*",
+            hooks: [{ type: "command", command: cmd(" --agent agy --event PreToolUse"), timeout: 30 }]
+          }
+        ],
+        PostToolUse: [
+          {
+            matcher: "*",
+            hooks: [{ type: "command", command: cmd(" --agent agy --event PostToolUse"), timeout: 30 }]
+          }
+        ],
+        PreInvocation: [
+          {
+            type: "command",
+            command: cmd(" --agent agy --event PreInvocation"),
+            timeout: 30
+          }
+        ]
+      };
+      break;
+    }
     case "cursor": {  // beforeShell/MCP enforce "ask"; preToolUse only for the remaining mutating tools
       file = join(home, ".cursor", "hooks.json");
       cfg = readJson(file);
@@ -151,7 +179,7 @@ function install(target) {
       return;
     }
     default:
-      die("install target must be one of claude, codex, copilot, gemini, cursor, pi, opencode (ACP is configured in the editor: see README)");
+      die("install target must be one of claude, codex, copilot, gemini, agy, cursor, pi, opencode (ACP is configured in the editor: see README)");
   }
   writeJson(file, cfg);
   console.log(`jev-guard: written to ${file}${note ? "\n" + note : ""}`);

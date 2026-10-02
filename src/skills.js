@@ -12,7 +12,7 @@ const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "logo
 const MAX_DEPTH = 7;
 
 export function userRoots(home = homedir()) {
-  return [".claude/skills", ".claude/plugins", ".claude/CLAUDE.md", ".codex", ".gemini/extensions", ".pi/agent", ".cursor", ".copilot", ".config/opencode", ".agents"].map((p) => join(home, p));
+  return [".claude/skills", ".claude/plugins", ".claude/CLAUDE.md", ".codex", ".gemini/extensions", ".gemini/config", ".pi/agent", ".cursor", ".copilot", ".config/opencode", ".agents"].map((p) => join(home, p));
 }
 export function projectRoots(cwd = process.cwd()) {
   return ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".claude", ".cursor", ".opencode", ".codex", ".gemini", ".agents", ".github/copilot-instructions.md", ".github/hooks", "skills"].map((p) => join(cwd, p));
