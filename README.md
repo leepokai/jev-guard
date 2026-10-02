@@ -49,7 +49,7 @@ Pick your agent; every row is one command, then give it a key.
 | Claude Code | `/plugin marketplace add leepokai/jev-guard` then `/plugin install jev-guard@jev-guard` | deny · **ask** prompt | flag |
 | Codex | `codex plugin marketplace add leepokai/jev-guard`, install from the plugin browser, `/hooks` to trust | deny · ask → warning (Codex has no `ask` yet) | flag |
 | Copilot CLI | `copilot plugin marketplace add leepokai/jev-guard` then `copilot plugin install jev-guard@jev-guard` | deny · **ask** prompt (`deny` in cloud agent) | flag |
-| Antigravity CLI (`agy`) | `jev-guard install agy` (writes hooks to `~/.gemini/config/hooks.json`) | deny · **ask** prompt | flag |
+| Antigravity CLI (`agy`) | `jev-guard install agy` (writes hooks to `~/.gemini/config/hooks.json`) | deny · ask (not yet verified live; some agy builds ignore `PreToolUse`/`PostToolUse`, leaving only the `PreInvocation` warning) | flag |
 | Gemini CLI | `gemini extensions install https://github.com/leepokai/jev-guard` — it asks for the key on install | deny · ask → warning (no `ask` in `BeforeTool`) | flag |
 | Cursor | plugin manifest included for marketplaces; solo users: `jev-guard install cursor` | deny · **ask** for shell and MCP (`preToolUse` can't ask) | flag |
 | pi | `pi install npm:jev-guard` (or `git:github.com/leepokai/jev-guard`) | block · **confirm dialog** | flag |

@@ -34,7 +34,7 @@ export function buildContext({ sessionId, transcriptPath, intent, messages } = {
 /** Last user texts and assistant texts from a Claude Code style JSONL transcript. Tool results are not user words. */
 export function readTranscript(path) {
   const out = { user: [], assistant: [] };
-  let raw;
+  let raw, partial;
   try {
     const size = statSync(path).size;
     const fd = openSync(path, "r");
@@ -43,8 +43,9 @@ export function readTranscript(path) {
     readSync(fd, buf, 0, len, size - len);
     closeSync(fd);
     raw = buf.toString("utf8");
+    partial = size > len;
   } catch { return out; }
-  for (const line of raw.split("\n")) {
+  for (const line of raw.split("\n").slice(partial ? 1 : 0)) {  // a tail read may start mid-record
     let rec;
     try { rec = JSON.parse(line); } catch { continue; }
     const role = rec.message?.role ?? rec.type ?? rec.role;
