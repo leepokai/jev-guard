@@ -198,6 +198,9 @@ test("hook dialects: agy", async () => {
     // error fallback for PreToolUse
     const errPre = await runMain("invalid json", ["--agent", "agy", "--event", "PreToolUse"], { JEV_GUARD_FAIL_CLOSED: "1" });
     assert.equal(errPre.decision, "deny");
+    // error fallback for PreToolUse without explicit --event (inferred from toolCall)
+    const errPreInferred = await runMain({ toolCall: { name: "test", args: { command: "git push" } } }, ["--agent", "agy"], { JEV_GUARD_FAIL_CLOSED: "1", JEV_BASE_URL: "http://127.0.0.1:0", JEV_API_KEY: "k" });
+    assert.equal(errPreInferred.decision, "deny");
     // error fallback for PostToolUse (must return empty object {})
     const errPost = await runMain("invalid json", ["--agent", "agy", "--event", "PostToolUse"], { JEV_GUARD_FAIL_CLOSED: "1" });
     assert.deepEqual(errPost, {});

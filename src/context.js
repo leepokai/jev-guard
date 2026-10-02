@@ -35,9 +35,8 @@ export function buildContext({ sessionId, transcriptPath, intent, messages } = {
 export function readTranscript(path) {
   const out = { user: [], assistant: [] };
   let raw;
-  let size = 0;
   try {
-    size = statSync(path).size;
+    const size = statSync(path).size;
     const fd = openSync(path, "r");
     const len = Math.min(size, TAIL_BYTES);
     const buf = Buffer.alloc(len);
@@ -45,8 +44,7 @@ export function readTranscript(path) {
     closeSync(fd);
     raw = buf.toString("utf8");
   } catch { return out; }
-  const lines = raw.split("\n");
-  for (const line of (size > TAIL_BYTES ? lines.slice(1) : lines)) {  // first line may be partial if truncated
+  for (const line of raw.split("\n")) {
     let rec;
     try { rec = JSON.parse(line); } catch { continue; }
     const role = rec.message?.role ?? rec.type ?? rec.role;

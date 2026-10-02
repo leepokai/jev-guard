@@ -20,15 +20,19 @@ const PROMPT_EVENTS = new Set(["UserPromptSubmit", "userPromptSubmitted", "Befor
 const SESSION_EVENTS = new Set(["SessionStart", "sessionStart"]);
 const CURSOR_PERMISSION_EVENTS = new Set(["beforeShellExecution", "beforeMCPExecution", "preToolUse"]);
 
-export async function handleHook(input, { agent, env = process.env, fetchImpl, event: explicitEvent } = {}) {
-  agent ??= detectAgent(input);
-  const opts = { env, fetchImpl };
-  const event = explicitEvent ?? input.hook_event_name ?? (
+function resolveEvent(explicitEvent, input = {}) {
+  return explicitEvent ?? input.hook_event_name ?? (
     input.toolCall ? "PreToolUse" :
     (input.invocationNum !== undefined || input.initialNumSteps !== undefined) ? "PreInvocation" :
     (input.stepIdx !== undefined && !input.toolCall) ? "PostToolUse" :
     undefined
   );
+}
+
+export async function handleHook(input, { agent, env = process.env, fetchImpl, event: explicitEvent } = {}) {
+  agent ??= detectAgent(input);
+  const opts = { env, fetchImpl };
+  const event = resolveEvent(explicitEvent, input);
   const sessionId = input.session_id ?? input.conversation_id ?? input.sessionId ?? input.conversationId;
   const cursor = typeof event === "string" && /^[a-z]/.test(event);  // camelCase event names are Cursor's
   const cwd = input.cwd ?? input.workspacePaths?.[0] ?? process.cwd();
@@ -177,7 +181,7 @@ export async function main(argv = process.argv.slice(2), stdin = process.stdin, 
     process.stderr.write(`jev-guard: ${err.message}\n`);
     const closed = !!env.JEV_GUARD_FAIL_CLOSED;  // default is fail-open: a dead API must not freeze the agent
     const reason = `jev-guard unavailable (${err.message}) and JEV_GUARD_FAIL_CLOSED is set`;
-    const resolvedEvent = event ?? input.hook_event_name;
+    const resolvedEvent = resolveEvent(event, input);
     if (agent === "agy") {
       if (resolvedEvent === "PreToolUse") {
         out = closed ? { decision: "deny", reason } : { decision: "allow" };
