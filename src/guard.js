@@ -1,5 +1,6 @@
 // The two checks every adapter shares. Code owns the policy; Jev answers narrow questions.
-import { ask } from "./jev.js";
+import { isAbsolute, relative, resolve } from "node:path";
+import { ask, setting } from "./jev.js";
 
 export const SCAN_QUESTIONS = {
   directed: {
@@ -101,19 +102,47 @@ export const ACTION_QUESTIONS = {
 // Tools whose calls are never worth a Jev round-trip (read-only), and whose results are never external content.
 // Names as each agent reports them: Claude/Codex/Copilot (Read, Bash…), pi/OpenCode (read, bash, list…), Gemini/agy (view_file, search_web, read_file…), Cursor (Shell, Delete, MCP:x).
 const READ_ONLY = new Set(["read", "glob", "grep", "ls", "list", "find", "webfetch", "websearch", "todowrite", "todoread", "askuserquestion", "exitplanmode",
-  "notebookread", "listmcpresourcestool", "readmcpresourcetool", "toolsearch", "skill", "task", "agent", "tabs_context_mcp", "read_page", "get_page_text",
+  "question", "read_mcp_resource", "list_mcp_resources",
+  "notebookread", "listmcpresourcestool", "readmcpresourcetool", "toolsearch", "skill", "task", "agent", "subagent", "tabs_context_mcp", "read_page", "get_page_text",
   "read_file", "read_many_files", "list_directory", "search_file_content", "grep_search", "google_web_search", "web_fetch", "write_todos",
   "view_file", "search_web", "read_url_content", "ask_question"]);
 const NEVER_EXTERNAL = new Set(["edit", "write", "multiedit", "notebookedit", "apply_patch", "patch", "delete", "glob", "grep", "ls", "list", "find", "todowrite", "todoread",
   "askuserquestion", "exitplanmode", "write_file", "replace", "write_todos", "write_to_file", "replace_file_content"]);
-// task/agent sit only in READ_ONLY: the sub-agent's own calls are judged one by one, but what it brings back can carry external text.
+// task/agent/subagent (OpenCode 2) sit only in READ_ONLY: the sub-agent's own calls are judged one by one, but what it brings back can carry external text.
+// Files a "workspace write" can touch: ordinary edits inside the project the agent was pointed at. Shell tools are
+// deliberately absent — a command can leave the workspace whatever its text says — and patch-style tools are absent
+// because their input names no single target to check.
+const WORKSPACE_WRITES = new Set(["edit", "write", "multiedit", "notebookedit", "notebook_edit", "create_file",
+  "write_file", "replace_file_content", "delete"]);
+// Secrets and history stay judged even inside the workspace.
+const PROTECTED_PATH = /(^|[\\/])(\.git|secrets)([\\/]|$)|(^|[\\/])\.env(\.[^\\/]*)?$|\.(pem|key|p12|pfx)$|(^|[\\/])id_(rsa|ed25519)[^\\/]*$/i;
+
+/** The path a write tool is about to touch, if its input names one. */
+export function targetPath(input) {
+  const v = typeof input === "string" ? input
+    : input?.file_path ?? input?.filePath ?? input?.path ?? input?.TargetFile ?? input?.AbsolutePath ?? input?.notebook_path ?? input?.target;
+  return typeof v === "string" && v ? v : undefined;
+}
+
+/** True when JEV_GUARD_WORKSPACE_WRITES=1 and this call edits a non-secret file inside `cwd`, so Jev is never asked. */
+export function workspaceWrite({ tool, input, cwd, env = process.env }) {
+  if (setting("JEV_GUARD_WORKSPACE_WRITES", env) !== "1") return false;
+  if (!WORKSPACE_WRITES.has(String(tool ?? "").toLowerCase())) return false;
+  const target = targetPath(input);
+  if (!target || !cwd || PROTECTED_PATH.test(target)) return false;
+  const root = resolve(cwd);
+  const rel = relative(root, resolve(root, target));
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
 export const MIN_SCAN_CHARS = 200;
 const MAX_STATE_CHARS = 60_000; // Jev's state ceiling is ~32k tokens
 
 export function thresholds(env = process.env) {
   // Out-of-range values fall back to the default: an env var set by something else must not switch the guard off silently.
   const n = (k, d, max = 1) => {
-    const v = env[k] === undefined || env[k] === "" ? NaN : +env[k];
+    const raw = setting(k, env);
+    const v = raw === undefined || raw === "" ? NaN : +raw;
     return v >= 0 && v <= max ? v : d;
   };
   return { denyScore: n("JEV_GUARD_DENY_SCORE", 2.5, 3), askScore: n("JEV_GUARD_ASK_SCORE", 1.5, 3), askP: n("JEV_GUARD_ASK_P", 0.75), injectP: n("JEV_GUARD_INJECT_P", 0.6),
@@ -136,7 +165,8 @@ export function decide({ risk, approval, user_requested, from_untrusted }, t = t
 export async function assessAction({ tool, input, cwd, agent, context }, opts = {}) {
   const env = opts.env ?? process.env;
   const name = String(tool ?? "").toLowerCase();
-  if (READ_ONLY.has(name) || list(env.JEV_GUARD_SKIP_TOOLS).has(name)) return null;
+  if (READ_ONLY.has(name) || list(setting("JEV_GUARD_SKIP_TOOLS", env)).has(name)) return null;
+  if (workspaceWrite({ tool, input, cwd, env })) return null;
   const a = await ask(context ? { agent, tool, input, cwd, context } : { agent, tool, input, cwd }, ACTION_QUESTIONS, opts);
   const { level, why } = decide(a, thresholds(env));
   const stats = `risk ${a.risk.score.toFixed(1)}/3, approval p=${(a.approval.p ?? 0).toFixed(2)}` +
@@ -155,7 +185,7 @@ export async function assessAction({ tool, input, cwd, agent, context }, opts = 
 export async function scanContent({ text, tool, source, task }, opts = {}) {
   const env = opts.env ?? process.env;
   const name = String(tool ?? "").toLowerCase();
-  if (NEVER_EXTERNAL.has(name) || list(env.JEV_GUARD_SKIP_SCAN).has(name)) return null;
+  if (NEVER_EXTERNAL.has(name) || list(setting("JEV_GUARD_SKIP_SCAN", env)).has(name)) return null;
   if (!text || text.length < MIN_SCAN_CHARS) return null;
   const a = await ask({ source: source ?? tool, ...(task ? { user_task: task } : {}), content: truncate(text) }, SCAN_QUESTIONS, opts);
   const kind = a.kind?.choice ?? "unknown";
@@ -216,6 +246,33 @@ export function collectText(value, out = []) {
 export function preview(input, max = 160) {
   const s = typeof input === "string" ? input : input?.CommandLine ?? input?.command ?? input?.TargetFile ?? input?.AbsolutePath ?? input?.file_path ?? input?.path ?? input?.url ?? input?.Url ?? JSON.stringify(input ?? "");
   return String(s).replace(/\s+/g, " ").slice(0, max);
+}
+
+/** A compact `- old` / `+ new` view of what an edit or write is about to change, trimmed to the lines that differ. */
+export function previewDiff(input, { maxLines = 12, maxChars = 700, maxLineChars = 160 } = {}) {
+  const oldText = input?.oldString ?? input?.old_string ?? input?.oldText;
+  const newText = input?.newString ?? input?.new_string ?? input?.newText ?? input?.content;
+  if (typeof oldText !== "string" && typeof newText !== "string") return undefined;
+  const oldLines = typeof oldText === "string" && oldText !== "" ? oldText.split("\n") : [];
+  const newLines = typeof newText === "string" && newText !== "" ? newText.split("\n") : [];
+  let head = 0;
+  while (head < oldLines.length && head < newLines.length && oldLines[head] === newLines[head]) head++;
+  let tail = 0;
+  while (tail < oldLines.length - head && tail < newLines.length - head &&
+    oldLines[oldLines.length - 1 - tail] === newLines[newLines.length - 1 - tail]) tail++;
+  const lines = [
+    ...oldLines.slice(head, oldLines.length - tail).map((l) => `- ${l}`),
+    ...newLines.slice(head, newLines.length - tail).map((l) => `+ ${l}`),
+  ].map((l) => (l.length > maxLineChars ? `${l.slice(0, maxLineChars - 1)}…` : l));
+  if (!lines.length) return ["(no textual change)"];
+  const shown = [];
+  let chars = 0;
+  for (const line of lines) {
+    if (shown.length >= maxLines || chars + line.length > maxChars) break;
+    shown.push(line); chars += line.length + 1;
+  }
+  if (shown.length < lines.length) shown.push(`… ${lines.length - shown.length} more line(s)`);
+  return shown;
 }
 
 export function truncate(text, max = MAX_STATE_CHARS) {

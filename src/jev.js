@@ -52,6 +52,16 @@ export function readConfig(env = process.env) {
   try { return JSON.parse(readFileSync(env.JEV_GUARD_CONFIG ?? CONFIG_FILE, "utf8")); } catch { return {}; }
 }
 
+/** A setting from the environment first, then ~/.jev-guard/config.json under the same name.
+ *  Hosts started without a login shell (an IDE daemon, a service manager) get no exported env, so
+ *  the config file is what makes the guard's policy survive there. */
+export function setting(name, env = process.env) {
+  const v = env[name];
+  if (v !== undefined && v !== "") return v;
+  const c = readConfig(env)[name];
+  return c === undefined || c === null ? undefined : String(c);
+}
+
 /** @returns {Promise<Record<string, {p?: number, choice?: string, score?: number, probabilities?: Record<string, number>, confidence?: number}>>} */
 export async function ask(state, questions, { env = process.env, fetchImpl = fetch, signal, timeoutMs } = {}) {
   const b = backend(env);

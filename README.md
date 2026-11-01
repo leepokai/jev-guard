@@ -53,7 +53,8 @@ Pick your agent; every row is one command, then give it a key.
 | Gemini CLI | `gemini extensions install https://github.com/leepokai/jev-guard` — it asks for the key on install | deny · ask → warning (no `ask` in `BeforeTool`) | flag |
 | Cursor | plugin manifest included for marketplaces; solo users: `jev-guard install cursor` | deny · **ask** for shell and MCP (`preToolUse` can't ask) | flag |
 | pi | `pi install npm:jev-guard` (or `git:github.com/leepokai/jev-guard`) | block · **confirm dialog** | flag |
-| OpenCode | `"plugin": ["jev-guard"]` in `opencode.json` (0.2.1+) | throw on deny · **ask** via `permission.ask` for tools you set to `"ask"` | flag |
+| OpenCode 1.x | `"plugin": ["jev-guard"]` in `opencode.json` (0.2.1+) | throw on deny · **ask** via `permission.ask` for tools you set to `"ask"` | flag |
+| OpenCode 2 | `opencode plugin add jev-guard` (or `"plugins": ["jev-guard"]`) | OpenCode's rules decide: a rule's allow runs untouched and a deny is final; only an **ask** is assessed, and Jev may then allow it silently, deny it, or raise the guard's own prompt — carrying the scores and, for an edit, the diff — so the user decides with the assessment in view. Nothing is assessed before the rules have spoken, so an allowed call sends no file content. Results are not scanned unless `JEV_GUARD_SCAN_RESULTS=1` | flag |
 | ACP | editor runs `jev-guard acp -- <agent>` | reject · **permission request** for `terminal/create`, `fs/write_text_file` | flag `fs/read_text_file`, `terminal/output` |
 
 Everything else goes through the npm package:
@@ -120,7 +121,7 @@ ask    if risk ≥ 1.5 or approval ≥ 0.75
 allow  otherwise
 ```
 
-Read-only tools (`Read`, `Grep`, `Glob`, `WebFetch`, …) are skipped without a call. So are `Skill`, `Task` and `Agent`: a skill's text is checked as an instruction file when it loads, and a sub-agent's own tool calls are judged one by one. Their results are still scanned.
+Read-only tools (`Read`, `Grep`, `Glob`, `WebFetch`, …) are skipped without a call. So are `Skill`, `Task` and `Agent`: a skill's text is checked as an instruction file when it loads, and a sub-agent's own tool calls are judged one by one. Their results are still scanned, except on OpenCode 2, where scanning is opt-in (`JEV_GUARD_SCAN_RESULTS=1`) so an ask-only gate does not ship tool output.
 
 **Context** is what makes the last two questions answerable. Each session keeps a small file under `~/.jev-guard/sessions/` with the user's recent prompts, the agent's stated intent, the last decisions, and every flagged piece of untrusted content with an excerpt of the planted instruction. Prompts arrive through the hosts' prompt hooks (`UserPromptSubmit`, `BeforeAgent`, `beforeSubmitPrompt`, ACP `session/prompt`) or the session itself (pi, OpenCode, Claude Code's transcript). Nothing in a tool result ever counts as the user speaking.
 
@@ -170,15 +171,20 @@ Results shorter than 200 characters and results of local edit/search tools are s
 | `JEV_GUARD_SCAN_CACHE` | `~/.jev-guard/scan-cache.json` | instruction-file scan cache |
 | `JEV_GUARD_SKIP_TOOLS` | | comma-separated tool names never assessed |
 | `JEV_GUARD_SKIP_SCAN` | | comma-separated tool names whose results are never scanned |
-| `JEV_GUARD_FAIL_CLOSED` | unset | if set, an unreachable Jev **denies** instead of allowing |
+| `JEV_GUARD_SCAN_RESULTS` | unset | `1` = also scan tool results for AI-directed text (OpenCode 2 only; off by default so an ask-only gate does not ship file contents) |
+| `JEV_GUARD_WORKSPACE_WRITES` | unset | `1` = an `edit`/`write`/`multiedit`/`delete` of a file inside the project directory is not assessed; paths outside it, `.git`, `secrets`, `.env*`, keys and every shell/patch tool stay assessed |
+| `JEV_GUARD_FAIL_CLOSED` | unset | if set, an unreachable Jev **denies** instead of allowing; it wins over `JEV_GUARD_ESCALATE_CLOSED` when both are set |
+| `JEV_GUARD_ESCALATE_CLOSED` | unset | `1` = an unreachable Jev still raises the guard's own prompt, saying the API was not available and that the call was not judged (instead of the host's plain prompt) |
 | `JEV_MODEL` | `jev-latest` / `jev-1.13` / `typesafe-ai/jev` | model id for TypeSafe or `JEV_BASE_URL` / OpenRouter / the gateway |
 | `JEV_BASE_URL` | unset | any System One server (`<base>/v1/systemone`), e.g. a local Kev; takes precedence over every key |
 | `JEV_BASE_API_KEY` | unset | bearer key sent only to `JEV_BASE_URL` |
 | `JEV_GUARD_CONFIG` | `~/.jev-guard/config.json` | where `jev-guard key` stores the key |
 
+Every `JEV_GUARD_*` setting above is also read from `~/.jev-guard/config.json` under the same name when the environment does not set it (the environment wins). That is what hosts started without a login shell — an IDE daemon, a service manager — actually see, and it is the same file that holds the API key.
+
 Scores must lie in 0–3 and probabilities in 0–1; anything else falls back to the default.
 
-By default jev-guard fails **open** with a warning on stderr: a dead API must not freeze your agent. Flip it if you'd rather it did.
+By default jev-guard fails **open** with a warning on stderr: a dead API must not freeze your agent. Flip it if you'd rather it did. On OpenCode 2 the host already owns the decision, so there is never an open failure to flip: an unreachable Jev leaves the prompt standing, `JEV_GUARD_ESCALATE_CLOSED=1` raises the guard's own prompt with "the assessment API was not available", and `JEV_GUARD_FAIL_CLOSED=1` denies outright.
 
 ## CLI
 
@@ -202,9 +208,9 @@ npm test          # node:test with a fake Jev; also spins up the ACP proxy again
 
 The launch video is a [Remotion](https://www.remotion.dev/) composition in `video/`: `cd video && npm i && npm run render` → `assets/launch.mp4`. The narration is generated from `video/vo.json` with `npm run vo` (edge-tts via `uvx`, no key), one clip per scene; scene lengths and the typing cues in `src/Launch.tsx` are timed to those clips.
 
-Layout: `src/jev.js` (one fetch, two backends) · `src/guard.js` (questions + policy) · `src/context.js` + `src/session.js` (what Jev gets to see) · `src/skills.js` (instruction-file sweep) · `src/hook.js` (Claude Code / Codex / Copilot / agy / Gemini / Cursor) · `src/acp.js` (proxy) · `src/opencode.js` (OpenCode plugin) · `extensions/jev-guard.ts` (pi) · `hooks/` (plugin hook manifests).
+Layout: `src/jev.js` (one fetch, two backends) · `src/guard.js` (questions + policy) · `src/context.js` + `src/session.js` (what Jev gets to see) · `src/skills.js` (instruction-file sweep) · `src/hook.js` (Claude Code / Codex / Copilot / agy / Gemini / Cursor) · `src/acp.js` (proxy) · `src/opencode.js` (OpenCode 1.x plugin) · `src/opencode-v2.js` (OpenCode 2 plugin; `src/opencode-server.js` is the `./server` entry both load) · `src/tui.js` (OpenCode 2 `./tui` entry: renders the reasoning behind a pending ask inside the asking session only — a bullet per score, the exact call, and the `- old` / `+ new` lines when the call changes text — because the dialog shows only the action name and a panel cannot follow tab switches) · `extensions/jev-guard.ts` (pi) · `hooks/` (plugin hook manifests).
 
-Verified end to end against the live API: Claude Code (`--plugin-dir`, headless) and OpenCode (`opencode run`, a `wrangler deploy --env production` came back as `jev-guard blocked this call`). Codex, Copilot CLI, Gemini CLI and Cursor are exercised at the payload level with their documented stdin/stdout shapes.
+Verified end to end against the live API: Claude Code (`--plugin-dir`, headless) and OpenCode (`opencode run`, a `wrangler deploy --env production` came back as `jev-guard blocked this call`). OpenCode 2 is verified end to end in 2.0.32 (`opencode run`) against a local fake System One server, not the live API: a destructive shell call was blocked, a `git push` raised a `jev-guard` permission request, and a planted instruction in a read file reached the model behind the warning. Codex, Copilot CLI, Gemini CLI and Cursor are exercised at the payload level with their documented stdin/stdout shapes.
 
 ## Security and privacy
 
