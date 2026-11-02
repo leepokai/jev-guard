@@ -3,7 +3,7 @@
 // The event name on stdin picks the dialect; `--agent codex|copilot` only matters where Claude-shaped agents differ.
 // Every event also feeds the per-session memory, so a tool call is judged with the user's recent words, the agent's
 // stated intent, and any untrusted content flagged earlier in the same session.
-import { assessAction, scanContent, collectText, preview, excerpt, INSTRUCTION_FILE } from "./guard.js";
+import { assessAction, scanContent, collectText, preview, excerpt, INSTRUCTION_FILE, thresholds } from "./guard.js";
 import { buildContext } from "./context.js";
 import { readSession, remember, markReported, update } from "./session.js";
 import { findInstructionFiles, projectRoots, scanFiles, scanInstructionsCached } from "./skills.js";
@@ -117,7 +117,30 @@ export async function handleHook(input, { agent, env = process.env, fetchImpl, e
   // ── Claude Code / Codex / Copilot CLI ───────────────────────────────────────────────────────────────────
   if (event === "PreToolUse" || event === "PermissionRequest") {
     const r = await assess(input.tool_name, input.tool_input);
-    if (!r || r.level === "allow") return null;
+    if (!r) return null;
+
+    if (r.level === "allow") {
+      const t = thresholds(env);
+      const lowRisk =
+        r.risk < Math.min(t.askScore, 1.5) &&
+        r.approval < Math.min(t.askP, 0.75);
+
+      if (
+        event === "PreToolUse" &&
+        agent === "claude" &&
+        env.JEV_GUARD_AUTO_APPROVE === "1" &&
+        lowRisk
+      ) {
+        return {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "allow",
+            permissionDecisionReason: r.message,
+          },
+        };
+      }
+      return null;
+    }
     if (event === "PermissionRequest") {
       return r.level === "deny" ? { hookSpecificOutput: { hookEventName: event, decision: { behavior: "deny", message: r.message } } } : null;
     }
