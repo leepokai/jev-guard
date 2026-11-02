@@ -484,3 +484,62 @@ test("opencode: skill results are checked as instruction files (#2)", async () =
     assert.match(bash.output, /^\[jev-guard: .*injection/);
   } finally { globalThis.fetch = realFetch; delete process.env.JEV_API_KEY; delete process.env.JEV_GUARD_SCAN_CACHE; delete process.env.JEV_GUARD_SESSIONS; }
 });
+test("Claude auto-approve: allow, ask, deny, opt-out", async () => {
+  const pre = (command) => ({
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command },
+    cwd: "/tmp",
+  });
+
+  const auto = {
+    ...opts,
+    env: { ...env, JEV_GUARD_AUTO_APPROVE: "1" },
+  };
+
+  // Safe action: auto-approved
+  const allowed = await handleHook(pre("npm test"), auto);
+  assert.equal(
+    allowed.hookSpecificOutput.permissionDecision,
+    "allow"
+  );
+
+  // Default behavior unchanged
+  assert.equal(
+    await handleHook(pre("npm test"), opts),
+    null
+  );
+
+  // Risky action: still asks
+  const asked = await handleHook(pre("git push"), auto);
+  assert.equal(
+    asked.hookSpecificOutput.permissionDecision,
+    "ask"
+  );
+
+  // Destructive action: still denied
+  const denied = await handleHook(pre("rm -rf /"), auto);
+  assert.equal(
+    denied.hookSpecificOutput.permissionDecision,
+    "deny"
+  );
+
+  // Read-only tools remain skipped
+  assert.equal(
+    await handleHook({
+      ...pre(""),
+      tool_name: "Read",
+      tool_input: { file_path: "/tmp/test" },
+    }, auto),
+    null
+  );
+
+  // Other agents remain unchanged
+  assert.equal(
+    await handleHook(pre("npm test"), {
+      ...auto,
+      agent: "codex",
+    }),
+    null
+  );
+});
